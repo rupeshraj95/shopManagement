@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  /* Register the custom animation variable and its keyframes natively */
+  --animate-fadeIn: fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+
+  @keyframes fadeIn {
+    from { 
+      opacity: 0; 
+      transform: scale(0.98); 
+    }
+    to { 
+      opacity: 1; 
+      transform: scale(1); 
+    }
+  }
+}
+
+/* Global design tokens targeting the executive layout base */
+body {
+  background-color: var(--color-zinc-50);
+  color: var(--color-zinc-900);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: var(--color-zinc-900);
+  color: var(--color-white);
+}
+
+/* ==========================================================================
+   PRODUCTION PRINT CSS LAYOUT CONFIGURATION OVERRIDES
+   ========================================================================== */
+@media print {
+  /* 1. Force the browser print utility to strip default page headers, footers, and URL hashes */
+  @page {
+    margin: 0px !important;
+    size: auto;
+  }
+
+  /* 2. Setup uniform page base alignment ONLY during actual print actions */
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0px !important;
+    margin: 0px !important;
+    display: block !important; /* Strips any inherited flexbox layout structures */
+  }
+
+  /* 3. Hide non-receipt layout structures strictly when a print job runs */
+  nav, 
+  aside, 
+  header,
+  button,
+  .print\:hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0px !important;
+    width: 0px !important;
+    padding: 0px !important;
+    margin: 0px !important;
+  }
+
+  /* 4. 💡 THE MODAL BACKGROUND OVERRIDE: Neutralizes the screen-centered overlay wrapper backdrop 
+        specifically during prints so it doesn't push the invoice modal downward */
+  div.fixed.inset-0.bg-zinc-950\/40 {
+    position: absolute !important;
+    top: 0px !important;
+    left: 0px !important;
+    display: block !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0px !important;
+    margin: 0px !important;
+  }
+
+  /* 5. THE TOP ALIGNMENT FIX: Aligns container directly to the top edge (0 margin) while keeping sides safe */
+  .print\:border-none {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    max-width: 18cm !important;
+    width: 100% !important;
+    margin: 0px auto !important; /* Locks layout directly to the top edge */
+    padding: 24px !important;
+    display: block !important;
+  }
+}
