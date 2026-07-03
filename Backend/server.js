@@ -15,7 +15,8 @@ const app = express();
 connectDB();
 
 const allowedOrigins = [
-  'https://abhishek-trading.onrender.com' , 'http://localhost:5173'
+  'https://abhishek-trading.onrender.com', 
+  'http://localhost:5173'
 ];
 
 app.use(cors({
