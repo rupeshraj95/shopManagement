@@ -16,10 +16,10 @@ const loginUser = async (req, res) => {
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none', 
+      sameSite: 'lax', 
       maxAge: 30 * 24 * 60 * 60 * 1000
     });
-    //strict to none
+    //strict to lax
     res.status(200).json({ _id: user._id, name: user.name, email: user.email });
   } catch (error) {
     res.status(500).json({ message: 'Server error during login', error: error.message });
