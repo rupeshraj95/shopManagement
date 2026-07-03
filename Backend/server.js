@@ -30,8 +30,7 @@ connectDB();
 // }));
 
 const allowedOrigins = [
-  'https://abhishek-trading.vercel.app',     // Your current live frontend URL
-  'https://abhishek-trading-api.vercel.app', // Your older frontend URL alternative
+  'https://abhishek-trading.onrender.com',     // Your current live frontend URL\
   'http://localhost:5173'                    // Your local testing environment
 ];
 
