@@ -14,20 +14,21 @@ dotenv.config();
 const app = express();
 connectDB();
 
-const allowedOrigins = [
-  process.env.FRONTEND_ORIGIN_URL || 'http://localhost:5173'
-];
+// const allowedOrigins = [
+//   process.env.FRONTEND_ORIGIN_URL || 'http://localhost:5173'
+// ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Allow server/testing suits requests safely
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error('CORS block structure mismatch.'), false);
-    }
-    return callback(null, true);
-  },
-  credentials: true
-}));
+// app.use(cors({
+//   origin: function (origin, callback) {
+//     if (!origin) return callback(null, true); // Allow server/testing suits requests safely
+//     if (allowedOrigins.indexOf(origin) === -1) {
+//       return callback(new Error('CORS block structure mismatch.'), false);
+//     }
+//     return callback(null, true);
+//   },
+//   credentials: true
+// }));
+app.use(cors());
 
 app.use(express.json());
 app.use(cookieParser());
