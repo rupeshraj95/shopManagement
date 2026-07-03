@@ -14,40 +14,40 @@ dotenv.config();
 const app = express();
 connectDB();
 
-// const allowedOrigins = [
-//   process.env.FRONTEND_ORIGIN_URL || 'http://localhost:5173'
-// ];
-
-// app.use(cors({
-//   origin: function (origin, callback) {
-//     if (!origin) return callback(null, true); // Allow server/testing suits requests safely
-//     if (allowedOrigins.indexOf(origin) === -1) {
-//       return callback(new Error('CORS block structure mismatch.'), false);
-//     }
-//     return callback(null, true);
-//   },
-//   credentials: true
-// }));
-
 const allowedOrigins = [
-  'https://abhishek-trading.onrender.com',     // Your current live frontend URL\
-  'http://localhost:5173'                    // Your local testing environment
+  'https://abhishek-trading.onrender.com' || 'http://localhost:5173'
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
+    if (!origin) return callback(null, true); // Allow server/testing suits requests safely
     if (allowedOrigins.indexOf(origin) === -1) {
       return callback(new Error('CORS block structure mismatch.'), false);
     }
     return callback(null, true);
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  credentials: true
 }));
+
+// const allowedOrigins = [
+//   'https://abhishek-trading.onrender.com',     // Your current live frontend URL\
+//   'http://localhost:5173'                    // Your local testing environment
+// ];
+
+// app.use(cors({
+//   origin: function (origin, callback) {
+//     // Allow requests with no origin (like mobile apps or curl requests)
+//     if (!origin) return callback(null, true);
+    
+//     if (allowedOrigins.indexOf(origin) === -1) {
+//       return callback(new Error('CORS block structure mismatch.'), false);
+//     }
+//     return callback(null, true);
+//   },
+//   credentials: true,
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization']
+// }));
 app.use(express.json());
 app.use(cookieParser());
 
