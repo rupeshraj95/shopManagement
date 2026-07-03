@@ -28,7 +28,13 @@ connectDB();
 //   },
 //   credentials: true
 // }));
-app.use(cors());
+
+app.use(cors({
+  origin: 'https://abhishek-trading.vercel.app', // Your exact frontend URL from image_3ccf7e.png
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 app.use(express.json());
 app.use(cookieParser());
