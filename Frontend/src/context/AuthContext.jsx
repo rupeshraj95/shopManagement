@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/auth/login', { email, password });
       setUser(response.data);
-      return { success: true };
+      return { success: true , token: response.data.token};
     } catch (error) {
       return {
         success: false,
@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => {
+export const useAuth = () =>  {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth loop evaluated completely outside of a stable AuthProvider hierarchy block.');
