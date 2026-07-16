@@ -5,7 +5,8 @@ const AuthContext = createContext(null);
 
 // Configure institutional API defaults for secure session handling
 axios.defaults.withCredentials = true;
-axios.defaults.baseURL = 'http://localhost:5000/api';
+// 💡 FIXED: Dynamically map base URL for production on Render or local development fallback
+axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -15,7 +16,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initializeAuthSession = async () => {
       try {
-        const response = await axios.get('/auth/me').catch(() => null);
+        const response = await axios.get('/auth/getMe');
         if (response && response.data) {
           setUser(response.data);
         }
