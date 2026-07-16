@@ -17,7 +17,8 @@ const loginUser = async (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: 'none', 
-      maxAge: 30 * 24 * 60 * 60 * 1000
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      path:'/'
     });
   
     res.status(200).json({ _id: user._id, name: user.name, email: user.email });
@@ -28,7 +29,7 @@ const loginUser = async (req, res) => {
 
 const logoutUser = async (req, res) => {
   try {
-    res.cookie('token', '', { httpOnly: true, expires: new Date(0), secure: true, sameSite: 'none' });
+    res.cookie('token', '', { httpOnly: true, secure: true, sameSite: 'none' ,path:'/'});
     res.status(200).json({ message: 'Logged out successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error during logout', error: error.message });
@@ -39,7 +40,8 @@ const logoutUser = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const token = req.cookies.token;
-    if (!token) return res.status(200).json(null); // Return empty state cleanly if no token is found
+    // 💡 FIXED: Return standard HTTP 401 Unauthorized status so your frontend hooks catch it
+    if (!token) return res.status(401).json({ message: 'No token provided' }); 
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).select('-password');
@@ -47,7 +49,8 @@ const getMe = async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
-    res.status(200).json(null); // Fail gracefully on context verification checks
+    // 💡 FIXED: Stop letting invalid/expired tokens slip through with HTTP 200 statuses
+    res.status(401).json({ message: 'Invalid token signature' });
   }
 };
 
