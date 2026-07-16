@@ -67,9 +67,6 @@ const Login = () => {
     const authResult = await login(formData.email, formData.password);
 
     if (authResult.success) {
-      if (authResult.token) {
-        localStorage.setItem('token', authResult.token);
-      }
       navigate(fallbackDestination, { replace: true });
     } else {
       setServerError(authResult.message);

@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/auth/login', { email, password });
       setUser(response.data);
-      return { success: true , token: response.data.token};
+      return { success: true };
     } catch (error) {
       return {
         success: false,
@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /**
+  /** 
    * Clears institutional session references on database repositories and client side
    */
   const logout = async () => {
