@@ -11,7 +11,6 @@ const Inventory = () => {
     try {
       const [productsResponse, categoriesResponse] = await Promise.all([
         axios.get('/products'),
-        // 💡 THE FIX: Aligned to hit your exact backend mounted endpoint path cleanly
         axios.get('/products/category') 
       ]);
       setProducts(productsResponse.data || []);
@@ -45,7 +44,6 @@ const Inventory = () => {
     });
   }, [categories, products]);
 
-  // Extract products belonging to the actively drilled down taxonomy segment
   const activeProductList = useMemo(() => {
     if (!selectedCategory) return [];
     return products.filter(p => p.category?._id === selectedCategory._id || p.category === selectedCategory._id);
@@ -116,8 +114,8 @@ const Inventory = () => {
                 </div>
 
                 <div className="pt-2 border-t border-zinc-100 flex justify-between items-center text-[10px] text-zinc-400 font-medium">
-                  <span>Cumulative Balance:</span>
-                  <span className="font-mono font-bold text-zinc-800">{cat.totalUnitsVolume} units</span>
+                  <span>Total Pieces Volume:</span>
+                  <span className="font-mono font-bold text-zinc-800">{cat.totalUnitsVolume} Pcs</span>
                 </div>
               </div>
             ))
@@ -146,15 +144,17 @@ const Inventory = () => {
               <thead>
                 <tr className="bg-zinc-50 border-b border-zinc-200 font-bold uppercase tracking-wider text-zinc-400 select-none">
                   <th className="px-5 py-3">Product Description Reference</th>
-                  <th className="px-5 py-3 w-44">Universal SKU</th>
-                  <th className="px-5 py-3 w-36 text-right">Unit Rate</th>
-                  <th className="px-5 py-3 w-44 text-center">Remaining Stock Volume</th>
+                  <th className="px-5 py-3 w-36">Universal SKU</th>
+                  <th className="px-5 py-3 w-28 text-right">Unit Rate</th>
+                  <th className="px-5 py-3 w-64 text-center">Remaining Stock Volume Breakdown</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 text-zinc-800">
                 {activeProductList.length > 0 ? (
                   activeProductList.map((item) => {
-                    const isLowStock = item.stockQuantity < 5;
+                    // Alert systems trace dynamically
+                    const isLowStock = item.packagingType === 'cartoon' ? item.cartoonCount <= 2 : item.stockQuantity < 5;
+                    
                     return (
                       <tr key={item._id} className={`transition-colors duration-150 ${isLowStock ? 'bg-amber-50/20' : 'hover:bg-zinc-50/20'}`}>
                         <td className="px-5 py-3.5 font-bold text-zinc-900">{item.name}</td>
@@ -162,11 +162,22 @@ const Inventory = () => {
                         <td className="px-5 py-3.5 text-right font-bold font-mono text-zinc-500">
                           ₹{Number(item.price).toFixed(2)}
                         </td>
-                        <td className="px-5 py-3.5 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <span className="font-mono font-bold text-zinc-900">{item.stockQuantity}</span>
+                        
+                        {/* 💡 THE PACKAGE-AWARE BALANCES VIEWPORT TABULATION CELL */}
+                        <td className="px-5 py-3.5 text-center font-mono">
+                          <div className="flex items-center justify-center gap-3">
+                            {item.packagingType === 'cartoon' ? (
+                              <div className="text-center">
+                                <span className="font-bold text-zinc-900">{item.cartoonCount} Ctn</span>
+                                <span className="text-zinc-400 mx-1.5">|</span>
+                                <span className="text-zinc-500 text-[11px] font-semibold">{item.stockQuantity} Total Pcs</span>
+                              </div>
+                            ) : (
+                              <span className="font-bold text-zinc-900">{item.stockQuantity} Pcs</span>
+                            )}
+                            
                             {isLowStock && (
-                              <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-black tracking-wide uppercase border border-amber-200/50 animate-pulse select-none">
+                              <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[9px] font-black uppercase border border-amber-200/50 animate-pulse">
                                 Low Stock
                               </span>
                             )}

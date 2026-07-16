@@ -39,7 +39,6 @@ const PastBills = () => {
     return customers.filter(c => c.name.toLowerCase().includes(target) || c.phone.includes(target));
   }, [searchQuery, customers]);
 
-  // 💡 UI/UX REWRITE: Recalibrated calculation matrix for accurate Dues vs Credit spillover balances
   const ledgerMap = useMemo(() => {
     if (!expandedCustomer || !expandedCustomer._id) {
       return { history: [], lifeTimeSum: 0, remainingBalance: 0, totalCreditBalance: 0 };
@@ -47,7 +46,6 @@ const PastBills = () => {
     
     const targetCustomerIdStr = expandedCustomer._id.toString();
 
-    // Filter customer transactions safely using primitive string values
     const clientHistory = invoices.filter(inv => {
       if (!inv.customer) return false;
       const invCustIdStr = (inv.customer._id || inv.customer).toString();
@@ -61,32 +59,25 @@ const PastBills = () => {
       const originalGrandTotal = Number(inv.grandTotal) || 0;
       const totalPaidSoFar = Number(inv.amountPaid) || 0;
       
-      // Extract absolute credit value of customer returns
       const invoiceReturnCredit = (inv.returnedHistory || []).reduce((acc, r) => acc + (Number(r.returnedAmount) || 0), 0);
       const isPureReturn = inv.items?.every(item => item.status === 'returned') && invoiceReturnCredit > 0;
 
-      // Formula A: Live Lifetime Purchases Calculation
       if (isPureReturn) {
         totalPurchasesSum -= invoiceReturnCredit;
       } else {
         totalPurchasesSum += (originalGrandTotal - invoiceReturnCredit);
       }
 
-      // Formula B: Raw Net Balance Calculation (Before separating Dues from Credit balances)
       if (inv.paymentStatus === 'Paid') {
-        // If paid, the invoice itself has no positive due balance remaining.
-        // However, if a pure return was submitted under a "Paid" flag to clear it, it creates negative balance/credit.
         if (isPureReturn) {
           netRunningDueOrCredit -= invoiceReturnCredit;
         }
       } else {
-        // For Pending or Partial accounts: compute remaining uncollected gap minus the current invoice returns credit
         const invoiceOutstandingDeficit = originalGrandTotal - totalPaidSoFar - invoiceReturnCredit;
         netRunningDueOrCredit += invoiceOutstandingDeficit;
       }
     });
 
-    // Determine final values based on whether the net calculation is a Debt or a Store Credit Surplus
     const remainingBalance = netRunningDueOrCredit > 0 ? netRunningDueOrCredit : 0;
     const totalCreditBalance = netRunningDueOrCredit < 0 ? Math.abs(netRunningDueOrCredit) : 0;
 
@@ -146,9 +137,8 @@ const PastBills = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 w-full min-h-full font-sans relative">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 w-full min-h-full overflow-y-auto font-sans relative">
       
-      {/* CSS Printing Custom Injection Block */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           .main-pastbills-dashboard { display: none !important; }
@@ -166,14 +156,12 @@ const PastBills = () => {
         }
       `}} />
 
-      {/* Main UI Layout Container */}
       <div className="main-pastbills-dashboard space-y-6 w-full print:hidden">
         <div className="border-b border-zinc-200 pb-5">
           <h1 className="text-base font-bold tracking-tight text-zinc-900">Past Bills Log</h1>
           <p className="text-xs text-zinc-400 mt-0.5">Audit historical billing files, filter profile statement tracking ledgers, and adjust settlement states.</p>
         </div>
 
-        {/* 💡 REWORKED: 3-Column Top Aggregate Dashboard Panel Grid Layout */}
         {expandedCustomer && (
           <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-2xs select-none animate-fadeIn">
             <div className="text-center pb-4 border-b border-zinc-100">
@@ -185,7 +173,6 @@ const PastBills = () => {
                 <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Live Lifetime Purchases</div>
                 <div className="text-xl font-black text-zinc-900 font-mono mt-1">₹{ledgerMap.lifeTimeSum.toFixed(2)}</div>
               </div>
-              {/* 💡 NEW PROFILE CARD COLUMN: Displays current active storefront credit balance surplus */}
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Live Credit Balance</div>
                 <div className={`text-xl font-black font-mono mt-1 ${ledgerMap.totalCreditBalance > 0 ? 'text-red-600 animate-pulse' : 'text-zinc-400'}`}>
@@ -203,7 +190,6 @@ const PastBills = () => {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Left Side: Directory search */}
           <div className="space-y-4">
             <div className="bg-white border border-zinc-200 p-4 rounded-xl shadow-2xs space-y-3">
               <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 select-none">Search Customer Directory</label>
@@ -219,7 +205,6 @@ const PastBills = () => {
             </div>
           </div>
 
-          {/* Right Side: Detailed Invoice Registry */}
           <div className="lg:col-span-2">
             {expandedCustomer ? (
               <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden animate-fadeIn">
@@ -291,7 +276,7 @@ const PastBills = () => {
       {/* DETAILED OVERLAY POPUP RECEIPT WINDOW */}
       {activeReceiptModal && (
         <div className="print-modal-overlay fixed inset-0 bg-zinc-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fadeIn select-none">
-          <div className="print-card-body bg-white border border-zinc-200 shadow-xl rounded-2xl max-w-md w-full p-6 my-4 space-y-6 max-h-[85vh] overflow-y-auto animate-scaleUp">
+          <div className="print-card-body bg-white border border-zinc-200 shadow-xl rounded-2xl max-w-md w-full p-6 my-4 space-y-6 max-h-[85vh] overflow-y-auto animate-scaleUp relative">
             
             <button type="button" onClick={() => setActiveReceiptModal(null)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-600 print:hidden text-base cursor-pointer font-bold transition duration-150">✕</button>
 
@@ -318,17 +303,44 @@ const PastBills = () => {
               <div className="divide-y divide-zinc-100 font-medium print:divide-zinc-200">
                 {activeReceiptModal.items?.map((item, index) => {
                   const isReturned = item.status === 'returned';
+                  
+                  // 💡 UPDATED: Integrated package-aware schema properties validation blocks cleanly
+                  const isCarton = item.unitType === 'cartoon';
+                  const pcsPerCtn = Number(item.piecesPerCartoon || (item.product ? item.product.piecesPerCartoon : 0)) || 0;
+                  const basePrice = Number(item.pricePerUnit) || 0;
+
+                  const totalCalculatedPieces = isCarton ? item.quantity * pcsPerCtn : item.quantity;
+                  const totalRowCost = Number(item.rowTotal) || (totalCalculatedPieces * basePrice);
+
                   return (
-                    <div key={index} className="py-2 flex justify-between items-start text-zinc-800 print:text-black">
-                      <div className="space-y-0.5">
-                        <p className="font-bold text-zinc-900 print:text-black flex items-center gap-1.5">
+                    <div key={index} className="py-2.5 flex justify-between items-start text-zinc-800 print:text-black text-left">
+                      <div className="space-y-0.5 w-full mr-4">
+                        <p className="font-bold text-zinc-900 print:text-black flex items-center gap-1.5 uppercase">
                           {item.product?.name || 'Asset Component'}
+                          <span className="text-[9px] px-1 bg-zinc-100 text-zinc-500 font-mono rounded normal-case print:border print:border-zinc-300">
+                            {isCarton ? 'ctn' : 'pc'}
+                          </span>
                           {isReturned && <span className="px-1 py-0.2 text-[8px] font-black bg-red-50 text-red-700 border border-red-200 uppercase rounded">Returned</span>}
                         </p>
-                        <p className="text-[10px] text-zinc-400 font-mono print:text-zinc-600">Qty: {item.quantity} × ₹{Number(item.pricePerUnit).toFixed(2)}</p>
+                        
+                        {/* 💡 UPDATED: Synchronized explicit layout conversion math calculations exactly */}
+                        {isCarton ? (
+                          <div className="text-[11px] text-zinc-500 space-y-0.5 font-medium mt-0.5">
+                            <p className="font-mono text-zinc-400 print:text-zinc-600">
+                              {item.quantity} ctn × {pcsPerCtn}/ctn = <span className="text-zinc-900 font-bold print:text-black">{totalCalculatedPieces} pc</span>
+                            </p>
+                            <p className="font-mono text-zinc-600 print:text-zinc-800">
+                              {totalCalculatedPieces} pc × ₹{basePrice.toFixed(2)}/pc
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-zinc-600 font-mono font-medium mt-0.5 print:text-zinc-800">
+                            {item.quantity} pc × ₹{basePrice.toFixed(2)}/pc
+                          </p>
+                        )}
                       </div>
-                      <span className={`font-mono font-bold ${isReturned ? 'text-red-600 print:text-black' : 'text-zinc-900'}`}>
-                        {isReturned ? '-' : ''}₹{Math.abs(Number(item.rowTotal)).toFixed(2)}
+                      <span className={`font-mono font-bold shrink-0 pt-0.5 text-xs ${isReturned ? 'text-red-600 print:text-black' : 'text-zinc-950'}`}>
+                        {isReturned ? '-' : ''}₹{Math.abs(totalRowCost).toFixed(2)}
                       </span>
                     </div>
                   );
@@ -344,13 +356,19 @@ const PastBills = () => {
               {activeReceiptModal.grandTotal > 0 ? (
                 <>
                   <div className="flex justify-between items-baseline pt-2 border-t border-dashed border-zinc-100 text-zinc-900 print:border-zinc-300"><span>Grand Total Settled</span><span className="text-lg font-black font-mono text-zinc-950 print:text-black">₹{Number(activeReceiptModal.grandTotal).toFixed(2)}</span></div>
-                  <div className="flex justify-between text-emerald-800 bg-emerald-50/50 p-1.5 rounded-lg mt-1"><span>Total Amount Paid</span><span className="font-mono font-black">₹{Number(activeReceiptModal.paymentStatus === 'Paid' ? activeReceiptModal.grandTotal : (activeReceiptModal.amountPaid || 0)).toFixed(2)}</span></div>
+                  
+                  {/* 💡 UPDATED: Dynamically draws financial payments log state from active invoice */}
+                  <div className="flex justify-between items-center p-2 bg-emerald-50/60 text-emerald-900 font-bold border border-emerald-100 rounded-xl mt-1 print:bg-transparent print:text-black print:border-none print:p-0">
+                    <span className="text-[11px] uppercase tracking-wide">Total Amount Paid</span>
+                    <span className="font-mono text-sm font-black">₹{Number(activeReceiptModal.amountPaid || 0).toFixed(2)}</span>
+                  </div>
+
                   {activeReceiptModal.grandTotal - activeReceiptModal.amountPaid > 0 && (
-                    <div className="flex justify-between text-amber-700 bg-amber-50/40 p-1.5 rounded-md mt-1"><span>Balance Deficit Due</span><span className="font-mono font-black">₹{Math.max(0, activeReceiptModal.grandTotal - (activeReceiptModal.amountPaid || 0)).toFixed(2)}</span></div>
+                    <div className="flex justify-between text-amber-700 bg-amber-50/40 p-1.5 rounded-md mt-1 print:bg-transparent print:text-black print:p-0"><span>Balance Deficit Due</span><span className="font-mono font-black">₹{Math.max(0, activeReceiptModal.grandTotal - (activeReceiptModal.amountPaid || 0)).toFixed(2)}</span></div>
                   )}
                 </>
               ) : (
-                <div className="flex justify-between text-red-800 bg-red-50/50 p-2 border border-red-200 rounded-xl mt-1">
+                <div className="flex justify-between text-red-800 bg-red-50/50 p-2 border border-red-200 rounded-xl mt-1 print:text-black print:border-none print:p-0">
                   <span className="uppercase text-[10px] tracking-wider">Total Return Credit Voucher Issued</span>
                   <span className="font-mono font-black text-base">₹{Number(activeReceiptModal.returnedHistory?.[0]?.returnedAmount || 0).toFixed(2)}</span>
                 </div>

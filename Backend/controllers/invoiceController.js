@@ -1,7 +1,7 @@
 const Invoice = require('../models/Invoice');
 const Product = require('../models/Product');
 const User = require('../models/User');
-const bcrypt = require('bcryptjs'); // For administrative password mutations verification
+const bcrypt = require('bcryptjs');
 
 // Generates systematic custom invoice sequencing strings
 const generateInvoiceNumber = async () => {
@@ -12,11 +12,16 @@ const generateInvoiceNumber = async () => {
   let sequenceNum = 1;
   if (lastInvoice) {
     const lastSequence = parseInt(lastInvoice.invoiceNumber.replace(prefix, ''), 10);
-    if (!isNaN(lastSequence)) sequenceNum = lastSequence + 1;
+    if (!isNaN(lastSequence)) {
+      sequenceNum = lastSequence + 1;
+    }
   }
   return `${prefix}${String(sequenceNum).padStart(4, '0')}`;
 };
 
+// @desc     Create new transaction invoice or process an isolated full customer return loop
+// @route    POST /api/invoices
+// @access   Private
 // @desc     Create new transaction invoice or process an isolated full customer return loop
 // @route    POST /api/invoices
 // @access   Private
@@ -28,43 +33,79 @@ const createInvoice = async (req, res) => {
       return res.status(400).json({ message: 'Customer ID and an array of items are required.' });
     }
 
-    // 💡 CRITICAL CHECK: Determine if the entire payload is structured as an isolated total storefront return loop
     const isPureReturnInvoice = items.every(item => item.status === 'returned');
 
     let calculatedSubTotal = 0;
     let totalReturnCredit = 0;
     const processedItems = [];
-    const stockUpdates = [];
+    const internalReturnedHistory = [];
 
-    // Evaluate stock quantities and track asset valuations
+    // 💡 FIXED: Process, adjust, and save inside a single unified loop to handle duplicate products flawlessly
     for (const item of items) {
-      const { product: productId, quantity, pricePerUnit, status } = item;
+      const { product: productId, quantity, pricePerUnit, unitType, status } = item;
       const parsedQuantity = Number(quantity) || 0;
+      const itemStatus = status || 'included';
+      const selectedUnit = unitType || 'piece';
 
+      // Always fetch the freshest state from the database
       const productObj = await Product.findById(productId);
       if (!productObj) return res.status(400).json({ message: `Product ${productId} not found.` });
 
-      const itemStatus = status || 'included';
-      const absoluteLineCost = pricePerUnit * parsedQuantity;
+      const isCartonMode = selectedUnit === 'cartoon' && productObj.packagingType === 'cartoon';
+      const conversionMultiplier = isCartonMode ? productObj.piecesPerCartoon : 1;
+      
+      const targetPiecesVolume = parsedQuantity * conversionMultiplier;
+      const computedUnitPrice = pricePerUnit * conversionMultiplier;
+      const absoluteLineCost = computedUnitPrice * parsedQuantity;
 
       if (itemStatus === 'included') {
-        if (productObj.stockQuantity < parsedQuantity) {
-          return res.status(400).json({ 
-            message: `Stock not available for ${productObj.name}. Only ${productObj.stockQuantity} left.` 
-          });
+        if (isCartonMode) {
+          if (productObj.cartoonCount < parsedQuantity) {
+            return res.status(400).json({ 
+              message: `Stock not available for ${productObj.name}. Only ${productObj.cartoonCount} cartons left.` 
+            });
+          }
+        } else {
+          if (productObj.stockQuantity < targetPiecesVolume) {
+            return res.status(400).json({ 
+              message: `Stock not available for ${productObj.name}. Only ${productObj.stockQuantity} pieces left.` 
+            });
+          }
         }
+        
         calculatedSubTotal += absoluteLineCost;
-        stockUpdates.push({ productId: productObj._id, incValue: -parsedQuantity }); // Deduct warehouse units
+        
+        // Apply stock deduction instantly
+        productObj.stockQuantity = Math.max(0, productObj.stockQuantity - targetPiecesVolume);
       } else if (itemStatus === 'returned') {
-        // Compute standalone return asset evaluations separate from sales matrix
         totalReturnCredit += absoluteLineCost;
-        stockUpdates.push({ productId: productObj._id, incValue: parsedQuantity }); // Add units back to available inventory
+        
+        // Apply return addition instantly
+        productObj.stockQuantity = productObj.stockQuantity + targetPiecesVolume;
       }
+
+      // Recalculate carton structures directly on the fresh stock volume
+      if (productObj.packagingType === 'cartoon' && productObj.piecesPerCartoon > 0) {
+        productObj.cartoonCount = Math.floor(productObj.stockQuantity / productObj.piecesPerCartoon);
+        productObj.individualPieces = productObj.stockQuantity % productObj.piecesPerCartoon;
+      } else {
+        productObj.cartoonCount = 0;
+        productObj.piecesPerCartoon = 0;
+        productObj.individualPieces = 0;
+      }
+
+      // Mark modified paths and commit to DB immediately before moving to the next item line
+      productObj.markModified('stockQuantity');
+      productObj.markModified('cartoonCount');
+      productObj.markModified('individualPieces');
+      await productObj.save();
 
       processedItems.push({ 
         product: productId, 
         quantity: parsedQuantity, 
         pricePerUnit, 
+        unitType: selectedUnit,
+        piecesPerCartoon: Number(productObj.piecesPerCartoon) || 0,
         status: itemStatus, 
         rowTotal: itemStatus === 'returned' ? -absoluteLineCost : absoluteLineCost 
       });
@@ -78,15 +119,12 @@ const createInvoice = async (req, res) => {
     let finalPaymentStatus = paymentStatus || 'Paid';
     
     const internalPaymentsLog = [];
-    const internalReturnedHistory = [];
 
-    // 💡 Step 3: Handle execution branching based on isolated return flags
     if (isPureReturnInvoice) {
-      // Isolate return logs cleanly: Force 0 financial totals so reporting aggregates remain clean
       calculatedSubTotal = 0;
       finalGrandTotal = 0;
       computedAmountPaid = 0;
-      finalPaymentStatus = 'Paid'; // Instantly settle row instance record
+      finalPaymentStatus = 'Paid'; 
 
       internalReturnedHistory.push({
         returnedAmount: Math.abs(totalReturnCredit),
@@ -94,7 +132,6 @@ const createInvoice = async (req, res) => {
         notes: 'Customer Return Processing Logic Loop'
       });
     } else {
-      // Standard workflow execution path for sales or multi-status mixed invoices
       finalGrandTotal = Math.max(0, calculatedSubTotal + finalTaxAmount - finalDiscountAmount);
       const remainingLiquidBalanceDue = Math.max(0, finalGrandTotal - totalReturnCredit);
 
@@ -118,13 +155,8 @@ const createInvoice = async (req, res) => {
         computedAmountPaid = initialInstallment;
         internalPaymentsLog.push({ amountCollected: initialInstallment, collectedAt: new Date() });
       } else {
-        computedAmountPaid = 0; // Pending collections default down to 0
+        computedAmountPaid = 0; 
       }
-    }
-
-    // Commit inventory adjustments to MongoDB tracking blocks atomically via $inc operations
-    for (const update of stockUpdates) {
-      await Product.findByIdAndUpdate(update.productId, { $inc: { stockQuantity: update.incValue } });
     }
 
     const generatedNum = await generateInvoiceNumber();
@@ -140,7 +172,7 @@ const createInvoice = async (req, res) => {
       amountPaid: computedAmountPaid,
       paymentStatus: finalPaymentStatus, 
       partialPayments: internalPaymentsLog,
-      returnedHistory: internalReturnedHistory, // 💡 Persist explicit historical returns log
+      returnedHistory: internalReturnedHistory, 
       digitalSignature: digitalSignature || "ABHISHEK_TRADING_TERMINAL_SIGN"
     });
 
@@ -160,9 +192,6 @@ const createInvoice = async (req, res) => {
   }
 };
 
-// @desc    Fetch comprehensive historical statements ledger index log
-// @route   GET /api/invoices
-// @access  Private
 const getInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.find()
@@ -175,9 +204,6 @@ const getInvoices = async (req, res) => {
   }
 };
 
-// @desc    Update invoice status securely with admin user password validation matching database hashes
-// @route   PUT /api/invoices/:id
-// @access  Private (Requires Session Token Auth Middleware)
 const updateInvoiceStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -247,6 +273,11 @@ const updateInvoiceStatus = async (req, res) => {
         targetInvoice.partialPayments = []; 
       }
     }
+
+    // Explicit path tracking before saving status adjustments
+    targetInvoice.markModified('amountPaid');
+    targetInvoice.markModified('paymentStatus');
+    targetInvoice.markModified('partialPayments');
 
     await targetInvoice.save();
 

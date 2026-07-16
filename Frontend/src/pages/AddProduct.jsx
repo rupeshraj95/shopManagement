@@ -3,22 +3,23 @@ import axios from 'axios';
 import InputField from '../components/InputField';
 
 const AddProduct = () => {
-  // Core Component Registries
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
-  const [formData, setFormData] = useState({ name: '', sku: '', category: '', price: '', stockQuantity: '' });
+  const [formData, setFormData] = useState({ 
+    name: '', sku: '', category: '', price: '', 
+    stockQuantity: '', packagingType: 'piece', cartoonCount: '', piecesPerCartoon: '', individualPieces: '' 
+  });
   
-  // Inline Administrative Operations States
   const [editingId, setEditingId] = useState(null);
-  const [editFormData, setEditFormData] = useState({ name: '', sku: '', category: '', price: '', stockQuantity: '' });
+  const [editFormData, setEditFormData] = useState({ 
+    name: '', sku: '', category: '', price: '', 
+    stockQuantity: '', packagingType: 'piece', cartoonCount: '', piecesPerCartoon: '', individualPieces: '',
+    stockEditMode: 'add' 
+  });
   
   const [errors, setErrors] = useState({});
-  const [feedback, setFeedback] = useState({ type: '', msg: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // CUSTOM POPUP OVERLAY ALERTS STATE MATRIX
   const [customAlert, setCustomAlert] = useState({ isOpen: false, type: 'success', title: '', msg: '' });
-  // State for product delete confirmation modal
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, targetId: null, msg: '' });
 
   const fetchInventoryTelemetry = async () => {
@@ -34,9 +35,7 @@ const AddProduct = () => {
     }
   };
 
-  useEffect(() => {
-    fetchInventoryTelemetry();
-  }, []);
+  useEffect(() => { fetchInventoryTelemetry(); }, []);
 
   const triggerPopupAlert = (type, title, msg) => {
     setCustomAlert({ isOpen: true, type, title, msg });
@@ -44,11 +43,19 @@ const AddProduct = () => {
 
   const validateForm = () => {
     const tempErrors = {};
-    if (!formData.name.trim()) tempErrors.name = 'Commercial product item designation is required.';
-    if (!formData.sku.trim()) tempErrors.sku = 'Universal product SKU alphanumeric tracking code is required.';
-    if (!formData.category) tempErrors.category = 'Please assign this item to a taxonomy group department.';
-    if (!formData.price || Number(formData.price) <= 0) tempErrors.price = 'Provide a baseline structural retail rate above $0.';
-    if (!formData.stockQuantity || Number(formData.stockQuantity) < 0) tempErrors.stockQuantity = 'Opening balance stock parameters cannot be blank.';
+    if (!formData.name.trim()) tempErrors.name = 'Product name is required.';
+    if (!formData.sku.trim()) tempErrors.sku = 'SKU is required.';
+    if (!formData.category) tempErrors.category = 'Please assign a store department category.';
+    if (!formData.price || Number(formData.price) <= 0) tempErrors.price = 'Provide a baseline price above ₹0.';
+    
+    if (formData.packagingType === 'piece') {
+      if (!formData.stockQuantity || Number(formData.stockQuantity) < 0) {
+        tempErrors.stockQuantity = 'Stock parameters cannot be blank.';
+      }
+    } else {
+      if (!formData.cartoonCount || Number(formData.cartoonCount) < 0) tempErrors.cartoonCount = 'Number of cartons is required.';
+      if (!formData.piecesPerCartoon || Number(formData.piecesPerCartoon) <= 0) tempErrors.piecesPerCartoon = 'Specify volume count configurations.';
+    }
     setErrors(tempErrors);
     return Object.keys(tempErrors).length === 0;
   };
@@ -56,8 +63,6 @@ const AddProduct = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
-    if (feedback.msg) setFeedback({ type: '', msg: '' });
   };
 
   const handleSubmit = async (e) => {
@@ -68,17 +73,27 @@ const AddProduct = () => {
     }
 
     setIsSubmitting(true);
+    
+    const sanitizedPayload = {
+      name: formData.name.trim(),
+      sku: formData.sku.trim(),
+      category: formData.category,
+      price: Number(formData.price) || 0,
+      packagingType: formData.packagingType || 'piece',
+      stockQuantity: formData.stockQuantity === '' ? 0 : Number(formData.stockQuantity),
+      cartoonCount: formData.cartoonCount === '' ? 0 : Number(formData.cartoonCount),
+      piecesPerCartoon: formData.piecesPerCartoon === '' ? 0 : Number(formData.piecesPerCartoon),
+      individualPieces: formData.individualPieces === '' ? 0 : Number(formData.individualPieces)
+    };
+
     try {
-      await axios.post('/products', {
-        ...formData,
-        price: Number(formData.price),
-        stockQuantity: Number(formData.stockQuantity)
-      });
-      triggerPopupAlert('success', 'Asset Logged Successfully', `Product profile asset line "${formData.name}" committed successfully.`);
-      setFormData({ name: '', sku: '', category: '', price: '', stockQuantity: '' });
-      await fetchInventoryTelemetry();
+      const response = await axios.post('/products', sanitizedPayload);
+      setProducts(prev => [response.data, ...prev]);
+      triggerPopupAlert('success', 'Asset Logged Successfully', `Product "${formData.name}" committed successfully.`);
+      setFormData({ name: '', sku: '', category: '', price: '', stockQuantity: '', packagingType: 'piece', cartoonCount: '', piecesPerCartoon: '', individualPieces: '' });
     } catch (err) {
-      triggerPopupAlert('error', 'Database Rejection', err.response?.data?.message || 'Database rejected asset profile declaration.');
+      const exactErrorReason = err.response?.data?.error || err.response?.data?.message || 'Database rejected declaration.';
+      triggerPopupAlert('error', 'Database Rejection', exactErrorReason);
     } finally {
       setIsSubmitting(false);
     }
@@ -91,30 +106,37 @@ const AddProduct = () => {
       sku: product.sku || '',
       category: product.category?._id || product.category || '',
       price: product.price,
-      stockQuantity: product.stockQuantity
+      packagingType: product.packagingType || 'piece',
+      stockQuantity: '', 
+      cartoonCount: '',
+      piecesPerCartoon: product.piecesPerCartoon || '',
+      individualPieces: '',
+      stockEditMode: 'add'
     });
   };
 
   const handleInlineUpdateSubmit = async (id) => {
-    if (!editFormData.name.trim() || !editFormData.sku.trim() || !editFormData.category || Number(editFormData.price) <= 0 || Number(editFormData.stockQuantity) < 0) {
-      triggerPopupAlert('error', 'Invalid Parameters', 'Invalid inline changes. Verify all fields are properly configured.');
-      return;
-    }
-
     try {
-      await axios.put(`/products/${id}`, {
+      const sanitizedPayload = {
         name: editFormData.name.trim(),
         sku: editFormData.sku.trim(),
         category: editFormData.category,
-        price: Number(editFormData.price),
-        stockQuantity: Number(editFormData.stockQuantity)
-      });
+        price: Number(editFormData.price) || 0,
+        packagingType: editFormData.packagingType,
+        stockQuantity: editFormData.stockQuantity === '' ? 0 : Number(editFormData.stockQuantity),
+        cartoonCount: editFormData.cartoonCount === '' ? 0 : Number(editFormData.cartoonCount),
+        piecesPerCartoon: editFormData.piecesPerCartoon === '' ? 0 : Number(editFormData.piecesPerCartoon),
+        individualPieces: editFormData.individualPieces === '' ? 0 : Number(editFormData.individualPieces),
+        stockEditMode: editFormData.stockEditMode
+      };
 
-      triggerPopupAlert('success', 'Record Saved', 'Product profile index parameters updated successfully.');
+      const response = await axios.put(`/products/${id}`, sanitizedPayload);
+      setProducts(prev => prev.map(p => p._id === id ? response.data : p));
+      triggerPopupAlert('success', 'Record Saved', 'Product database properties updated successfully.');
       setEditingId(null);
-      await fetchInventoryTelemetry();
     } catch (err) {
-      triggerPopupAlert('error', 'Update Failed', err.response?.data?.message || 'Failed to modify entry profile parameters.');
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to modify entry.';
+      triggerPopupAlert('error', 'Update Failed', errorMsg);
     }
   };
 
@@ -122,23 +144,25 @@ const AddProduct = () => {
     setConfirmModal({
       isOpen: true,
       targetId: product._id,
-      msg: `Are you completely sure you want to permanently delete "${product.name}" from your active inventory? This action cannot be reversed.`
+      msg: `Permanently delete "${product.name}"? This action cannot be reversed.`
     });
   };
 
+  // 💡 HARDENED DELETE HANDLER WITH IMMEDIATE LOCAL ARRAY RE-FILTERING
   const handleConfirmedDelete = async () => {
     const id = confirmModal.targetId;
     setConfirmModal({ isOpen: false, targetId: null, msg: '' });
     try {
       await axios.delete(`/products/${id}`);
-      triggerPopupAlert('success', 'Product Deleted', 'The product registry was completely cleared from storage nodes.');
-      await fetchInventoryTelemetry();
+      setProducts(prev => prev.filter(p => p._id !== id));
+      if (editingId === id) setEditingId(null);
+      triggerPopupAlert('success', 'Product Deleted', 'Product record successfully removed.');
     } catch (err) {
-      triggerPopupAlert('error', 'Deletion Failed', err.response?.data?.message || 'Failed to clear product item from database.');
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Failed to remove product item.';
+      triggerPopupAlert('error', 'Deletion Failed', errorMsg);
     }
   };
 
-  // Helper helper utility resolution logic string extractor to guarantee safe render paths
   const resolveCategoryLabel = (itemCategory) => {
     if (!itemCategory) return 'Unassigned';
     if (typeof itemCategory === 'object' && itemCategory.name) return itemCategory.name;
@@ -147,55 +171,72 @@ const AddProduct = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 animate-fadeIn font-sans relative">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 font-sans">
       <div className="border-b border-zinc-200 pb-5">
-        <h1 className="text-base font-bold tracking-tight text-zinc-900">Add New Product</h1>
-        <p className="text-xs text-zinc-400 mt-0.5">Initialize a brand new inventory stock item tracking blueprint into your live database.</p>
+        <h1 className="text-base font-bold text-zinc-900">Add New Product Portfolio Asset</h1>
+        <p className="text-xs text-zinc-400">Initialize a brand new inventory stock item tracking blueprint into your database ledger.</p>
       </div>
 
-      <div className="bg-white border border-zinc-200 rounded-xl p-5 sm:p-6 shadow-2xs space-y-5">
+      {/* Creation Form Block */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-2xs space-y-4">
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <InputField label="Commercial Item Name *" name="name" value={formData.name} onChange={handleInputChange} placeholder="TOP BAR" error={errors.name} disabled={isSubmitting} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="sm:col-span-2">
+              <InputField label="Product Name *" name="name" value={formData.name} onChange={handleInputChange} placeholder="TOP BAR" disabled={isSubmitting} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Inventory Tracking Mode *</label>
+              <select name="packagingType" value={formData.packagingType} onChange={handleInputChange} className="w-full text-sm rounded-xl border border-zinc-200 px-3.5 py-2 bg-white focus:outline-hidden focus:border-zinc-900 transition">
+                <option value="piece">Pieces (Standard Single Loose Stock)</option>
+                <option value="cartoon">Cartons (Hybrid Packaged Box Multipliers)</option>
+              </select>
+            </div>
+          </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InputField label="Stock Keeping Unit (SKU) *" name="sku" value={formData.sku} onChange={handleInputChange} placeholder="TOP-25G-BAR" error={errors.sku} disabled={isSubmitting} />
-            
+            <InputField label="SKU Code *" name="sku" value={formData.sku} onChange={handleInputChange} placeholder="TOP-25G-BAR" disabled={isSubmitting} />
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 select-none">Taxonomy Association *</label>
-              <select name="category" value={formData.category} onChange={handleInputChange} disabled={isSubmitting} className={`w-full text-sm rounded-xl border px-3.5 py-2 bg-white focus:outline-hidden font-medium transition duration-150 ${errors.category ? 'border-red-300 focus:border-red-500' : 'border-zinc-200 focus:border-zinc-900'}`}>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Category Department *</label>
+              <select name="category" value={formData.category} onChange={handleInputChange} className="w-full text-sm rounded-xl border border-zinc-200 px-3.5 py-2 bg-white focus:outline-hidden focus:border-zinc-900">
                 <option value="">-- Choose Store Department --</option>
                 {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
               </select>
-              {errors.category && <p className="text-[11px] font-medium text-red-600 animate-fadeIn">{errors.category}</p>}
             </div>
-
-            <InputField label="Retail Rate Price (₹) *" name="price" type="number" step="0.01" value={formData.price} onChange={handleInputChange} placeholder="399.99" error={errors.price} disabled={isSubmitting} />
-            <InputField label="Opening Balance Volume *" name="stockQuantity" type="number" value={formData.stockQuantity} onChange={handleInputChange} placeholder="15" error={errors.stockQuantity} disabled={isSubmitting} />
+            <InputField label="Retail Price (₹) *" name="price" type="number" step="0.01" value={formData.price} onChange={handleInputChange} placeholder="399.99" disabled={isSubmitting} />
+            
+            {formData.packagingType === 'piece' ? (
+              <InputField label="Opening Pieces Count *" name="stockQuantity" type="number" value={formData.stockQuantity} onChange={handleInputChange} placeholder="15" disabled={isSubmitting} />
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                <InputField label="No. of Cartons *" name="cartoonCount" type="number" value={formData.cartoonCount} onChange={handleInputChange} placeholder="5" />
+                <InputField label="Pcs Per Carton *" name="piecesPerCartoon" type="number" value={formData.piecesPerCartoon} onChange={handleInputChange} placeholder="2" />
+                <InputField label="Loose Pieces *" name="individualPieces" type="number" value={formData.individualPieces} onChange={handleInputChange} placeholder="1" />
+              </div>
+            )}
           </div>
 
-          <div className="pt-4 border-t border-zinc-100 flex justify-end select-none">
-            <button type="submit" disabled={isSubmitting} className="px-5 h-9 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs">
-              {isSubmitting ? 'Injecting Entry...' : 'Inject Product Line'}
-            </button>
+          <div className="flex justify-end pt-2 border-t border-zinc-100">
+            <button type="submit" disabled={isSubmitting} className="px-5 h-9 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs uppercase rounded-xl transition">Inject Product Line</button>
           </div>
         </form>
       </div>
 
-      <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden animate-fadeIn">
-        <div className="px-5 py-3.5 border-b border-zinc-100 bg-zinc-50/50 select-none">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Current Inventory Ledger Rows ({products.length})</span>
+      {/* Main Ledger Database List View */}
+      <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Inventory Stock Ledger Registry ({products.length})</span>
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-medium border-collapse">
+          <table className="w-full text-left text-xs border-collapse font-medium">
             <thead>
               <tr className="bg-zinc-50/70 border-b border-zinc-200 font-bold uppercase tracking-wider text-zinc-400 select-none">
-                <th className="px-4 py-3">Product Name</th>
-                <th className="px-4 py-3 w-36">SKU Code</th>
-                <th className="px-4 py-3 w-36">Category</th>
-                <th className="px-4 py-3 w-28 text-right">Price Rate</th>
-                <th className="px-4 py-3 w-24 text-center">In Stock</th>
-                <th className="px-4 py-3 w-36 text-center">Actions</th>
+                <th className="px-3 py-3 w-40">Product Details</th>
+                <th className="px-3 py-3 w-28">SKU / Category</th>
+                <th className="px-3 py-3 w-20 text-right">Price</th>
+                <th className="px-3 py-3 w-40 text-center">Update Settings Mode</th>
+                <th className="px-3 py-3 w-48 text-center">Quantities Allocation Balance</th>
+                <th className="px-3 py-3 w-28 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 text-zinc-700">
@@ -204,55 +245,103 @@ const AddProduct = () => {
                   const isEditingRow = editingId === item._id;
                   return (
                     <tr key={item._id} className="hover:bg-zinc-50/10 transition duration-150">
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-2.5">
                         {isEditingRow ? (
-                          <input type="text" value={editFormData.name} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} className="w-full text-xs font-bold rounded-lg border border-zinc-200 px-2 py-1 bg-white focus:outline-hidden text-zinc-900" />
+                          <input type="text" value={editFormData.name} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} className="w-full text-xs font-bold rounded-lg border border-zinc-200 px-2 py-1 text-zinc-900 focus:outline-hidden" />
                         ) : (
-                          <span className="font-bold text-zinc-900">{item.name}</span>
+                          <span className="font-bold text-zinc-900 block">{item.name}</span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-2.5">
                         {isEditingRow ? (
-                          <input type="text" value={editFormData.sku} onChange={(e) => setEditFormData({ ...editFormData, sku: e.target.value })} className="w-full text-xs font-mono rounded-lg border border-zinc-200 px-2 py-1 bg-white focus:outline-hidden text-zinc-900" />
+                          <div className="space-y-1">
+                            <input type="text" value={editFormData.sku} onChange={(e) => setEditFormData({ ...editFormData, sku: e.target.value })} className="w-full text-[11px] font-mono rounded-lg border border-zinc-200 px-2 py-0.5 text-zinc-900 focus:outline-hidden" />
+                            <select value={editFormData.category} onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })} className="w-full text-[11px] rounded-lg border border-zinc-200 p-0.5 text-zinc-900 font-medium focus:outline-hidden">
+                              {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                            </select>
+                          </div>
                         ) : (
-                          <span className="font-mono text-zinc-400">{item.sku || 'N/A'}</span>
+                          <div className="space-y-0.5">
+                            <span className="font-mono text-zinc-400 block">{item.sku || 'N/A'}</span>
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-zinc-100 text-zinc-500 rounded uppercase">{resolveCategoryLabel(item.category)}</span>
+                          </div>
                         )}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-2.5 text-right font-mono font-bold">
                         {isEditingRow ? (
-                          <select value={editFormData.category} onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })} className="w-full text-xs rounded-lg border border-zinc-200 px-2 py-1 bg-white focus:outline-hidden text-zinc-900 font-medium">
-                            {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                          </select>
-                        ) : (
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-zinc-100 text-zinc-600 rounded-md uppercase">
-                            {resolveCategoryLabel(item.category)}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-mono font-bold">
-                        {isEditingRow ? (
-                          <input type="number" step="0.01" value={editFormData.price} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} className="w-20 text-right rounded-lg border border-zinc-200 px-2 py-1 bg-white focus:outline-hidden text-zinc-900" />
+                          <input type="number" step="0.01" value={editFormData.price} onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })} className="w-16 text-right rounded-lg border border-zinc-200 px-2 py-1 text-zinc-900 focus:outline-hidden" />
                         ) : (
                           <span className="text-zinc-900">₹{Number(item.price).toFixed(2)}</span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-center font-mono font-semibold">
+                      
+                      <td className="px-3 py-2.5 text-center">
                         {isEditingRow ? (
-                          <input type="number" value={editFormData.stockQuantity} onChange={(e) => setEditFormData({ ...editFormData, stockQuantity: e.target.value })} className="w-16 text-center rounded-lg border border-zinc-200 px-2 py-1 bg-white focus:outline-hidden text-zinc-900" />
+                          <div className="space-y-1.5 max-w-[150px] mx-auto">
+                            <select value={editFormData.stockEditMode} onChange={(e) => setEditFormData({ ...editFormData, stockEditMode: e.target.value })} className="w-full text-[10px] font-bold border border-zinc-300 rounded bg-zinc-900 text-white p-0.5 focus:outline-hidden">
+                              <option value="add">➕ Add More Stock</option>
+                              <option value="change">✏️ Change Previous</option>
+                            </select>
+                            
+                            <select disabled value={editFormData.packagingType} className="w-full text-[10px] rounded border border-zinc-200 p-0.5 bg-zinc-100 text-zinc-400 font-semibold cursor-not-allowed">
+                              <option value="piece">Pieces Mode (Locked)</option>
+                              <option value="cartoon">Cartons Mode (Locked)</option>
+                            </select>
+                          </div>
                         ) : (
-                          <span className={item.stockQuantity <= 5 ? 'text-red-600 font-bold animate-pulse' : 'text-zinc-500'}>{item.stockQuantity}</span>
+                          <span className="text-zinc-400 font-medium text-[10px] uppercase tracking-wide">
+                            {item.packagingType === 'cartoon' ? '📦 Carton Tracking' : '🧩 Loose Piece'}
+                          </span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-center select-none">
+
+                      <td className="px-3 py-2.5 text-center font-mono">
                         {isEditingRow ? (
-                          <div className="flex justify-center gap-1.5">
-                            <button type="button" onClick={() => handleInlineUpdateSubmit(item._id)} className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-md font-bold text-[10px] uppercase cursor-pointer">Save</button>
-                            <button type="button" onClick={() => setEditingId(null)} className="px-2 py-0.5 bg-white border border-zinc-200 text-zinc-400 rounded-md font-bold text-[10px] uppercase cursor-pointer">Cancel</button>
+                          <div className="flex items-center gap-1 justify-center">
+                            {editFormData.packagingType === 'piece' ? (
+                              <input type="number" placeholder={editFormData.stockEditMode === 'add' ? "+Qty" : "Qty"} value={editFormData.stockQuantity} onChange={(e) => setEditFormData({ ...editFormData, stockQuantity: e.target.value })} className="w-16 text-center text-xs border border-zinc-200 rounded text-zinc-900 p-0.5" />
+                            ) : (
+                              <div className="flex flex-col gap-1 items-center bg-zinc-50 border border-zinc-100 p-1 rounded-md">
+                                <div className="flex gap-1 items-center justify-center">
+                                  <input type="number" placeholder={editFormData.stockEditMode === 'add' ? "+Ctn" : "Ctn"} value={editFormData.cartoonCount} onChange={(e) => setEditFormData({ ...editFormData, cartoonCount: e.target.value })} className="w-10 text-center text-[10px] border border-zinc-200 rounded text-zinc-900" title="Cartons Input" />
+                                  <span className="text-[9px] text-zinc-400">×</span>
+                                  <input type="number" placeholder="Pcs/Ctn" value={editFormData.piecesPerCartoon} onChange={(e) => setEditFormData({ ...editFormData, piecesPerCartoon: e.target.value })} className="w-12 text-center text-[10px] border border-zinc-200 rounded text-zinc-900" title="Pcs per Carton Configuration" />
+                                </div>
+                                <input type="number" placeholder={editFormData.stockEditMode === 'add' ? "+Loose" : "Loose Pcs"} value={editFormData.individualPieces} onChange={(e) => setEditFormData({ ...editFormData, individualPieces: e.target.value })} className="w-24 text-center text-[10px] border border-zinc-200 rounded text-zinc-900" title="Individual Loose Pieces Input" />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5 text-center">
+                            {item.packagingType === 'cartoon' ? (
+                              <>
+                                <div className="text-zinc-900 font-bold text-[11px]">
+                                  {item.cartoonCount} <span className="text-zinc-400 font-normal">Ctn</span>
+                                  {item.individualPieces > 0 && <span className="text-zinc-900 pl-1">+{item.individualPieces} Pcs</span>}
+                                </div>
+                                <div className="text-[10px] text-zinc-400 font-semibold">
+                                  ({item.piecesPerCartoon} Pcs/Ctn = <span className="text-zinc-800 font-black">{item.stockQuantity} Total Pcs</span>)
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-zinc-900 font-bold">
+                                {item.stockQuantity} <span className="text-zinc-400 font-normal text-[11px]">Pieces</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      
+                      <td className="px-3 py-2.5 text-center select-none">
+                        {isEditingRow ? (
+                          <div className="flex justify-center gap-1">
+                            <button type="button" onClick={() => handleInlineUpdateSubmit(item._id)} className="px-2 py-0.5 bg-zinc-900 text-white rounded font-bold text-[9px] uppercase cursor-pointer">Save</button>
+                            <button type="button" onClick={() => setEditingId(null)} className="px-1.5 py-0.5 bg-white border border-zinc-200 text-zinc-400 rounded font-bold text-[9px] uppercase cursor-pointer">Cancel</button>
                           </div>
                         ) : (
                           <div className="flex justify-center gap-3">
-                            <button type="button" onClick={() => startEditingMode(item)} className="text-zinc-900 hover:text-zinc-600 underline font-bold cursor-pointer focus:outline-hidden">Edit</button>
-                            <button type="button" onClick={() => startDeleteConfirmation(item)} className="text-red-600 hover:text-red-800 underline font-bold cursor-pointer focus:outline-hidden">Delete</button>
+                            <button type="button" onClick={() => startEditingMode(item)} className="text-zinc-900 underline font-bold cursor-pointer">Edit</button>
+                            <button type="button" onClick={() => startDeleteConfirmation(item)} className="text-red-600 underline font-bold cursor-pointer">Delete</button>
                           </div>
                         )}
                       </td>
@@ -261,7 +350,7 @@ const AddProduct = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="6" className="px-5 py-8 text-center text-zinc-400 italic">No items registered inside database ledger nodes yet.</td>
+                  <td colSpan="6" className="px-5 py-8 text-center text-zinc-400 italic">No inventory tracked yet.</td>
                 </tr>
               )}
             </tbody>
@@ -269,12 +358,33 @@ const AddProduct = () => {
         </div>
       </div>
 
-      {/* POPUP NOTIFICATION MODAL */}
-      {customAlert.isOpen && (
-        <div className="fixed inset-0 bg-zinc-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn select-none">
+      {/* 💡 FIXED: POPUP CONFIRMATION MODAL INTERFACE ADDED CLEANLY AT THE DOM ROOT CONTAINER */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-zinc-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white border border-zinc-200 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-scaleUp">
             <div className="flex items-start gap-3">
-              <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 font-bold text-sm ${customAlert.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+              <div className="h-8 w-8 rounded-full bg-red-50 text-red-800 flex items-center justify-center shrink-0 font-bold text-sm">
+                🗑️
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-black text-zinc-900 uppercase tracking-wide">Confirm Deletion</h3>
+                <p className="text-xs leading-normal text-zinc-500 font-medium">{confirmModal.msg}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1 border-t border-zinc-100">
+              <button type="button" onClick={() => setConfirmModal({ isOpen: false, targetId: null, msg: '' })} className="px-3 py-1.5 bg-white border border-zinc-200 text-zinc-500 font-bold text-xs uppercase rounded-xl transition cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleConfirmedDelete} className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase rounded-xl transition cursor-pointer">Delete Asset</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Overlay Modal */}
+      {customAlert.isOpen && (
+        <div className="fixed inset-0 bg-zinc-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-zinc-200 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-scaleUp">
+            <div className="flex items-start gap-3">
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 font-bold text-sm ${customAlert.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
                 {customAlert.type === 'success' ? '✓' : '⚠️'}
               </div>
               <div className="space-y-1">
@@ -283,26 +393,7 @@ const AddProduct = () => {
               </div>
             </div>
             <div className="flex justify-end pt-1 border-t border-zinc-100">
-              <button type="button" onClick={() => setCustomAlert({ isOpen: false, type: 'success', title: '', msg: '' })} className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">Acknowledge Check</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ASYNC PRODUCT PURGE DESTRUCTIVE CONFIRM MODAL OVERLAY */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-zinc-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn select-none">
-          <div className="bg-white border border-zinc-200 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-scaleUp">
-            <div className="flex items-start gap-3">
-              <div className="h-8 w-8 rounded-full bg-red-50 text-red-800 border border-red-200 flex items-center justify-center shrink-0 font-black text-sm">✕</div>
-              <div className="space-y-1">
-                <h3 className="text-sm font-black text-zinc-900 uppercase tracking-wide">Confirm Product Removal</h3>
-                <p className="text-xs leading-normal text-zinc-500 font-medium">{confirmModal.msg}</p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100">
-              <button type="button" onClick={() => setConfirmModal({ isOpen: false, targetId: null, msg: '' })} className="px-3.5 py-1.5 border border-zinc-200 text-zinc-500 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer">Abort</button>
-              <button type="button" onClick={handleConfirmedDelete} className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer shadow-xs">Execute Delete</button>
+              <button type="button" onClick={() => setCustomAlert({ isOpen: false, type: 'success', title: '', msg: '' })} className="px-4 py-1.5 bg-zinc-900 text-white font-bold text-xs uppercase rounded-xl transition cursor-pointer">Acknowledge</button>
             </div>
           </div>
         </div>

@@ -6,9 +6,11 @@ const InvoiceSchema = new mongoose.Schema({
   
   items: [{
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-    // 💡 UPDATED: Removed min: 1 constraint to let users backspace inputs completely while typing
     quantity: { type: Number, required: true }, 
     pricePerUnit: { type: Number, required: true },
+    // 💡 FIXED: Explicit tracking properties captured to prevent undefined evaluation fallbacks
+    unitType: { type: String, enum: ['piece', 'cartoon'], default: 'piece' },
+    piecesPerCartoon: { type: Number, default: 0 },
     status: { type: String, enum: ['included', 'returned'], default: 'included' },
     rowTotal: { type: Number, required: true }
   }],
@@ -25,7 +27,6 @@ const InvoiceSchema = new mongoose.Schema({
     collectedAt: { type: Date, default: Date.now }
   }],
 
-  // 💡 ADDED: Explicit tracking array recording structural return credits over time
   returnedHistory: [{
     returnedAmount: { type: Number, required: true },
     returnedAt: { type: Date, default: Date.now },
