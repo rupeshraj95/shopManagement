@@ -11,7 +11,7 @@ const Billing = () => {
   const [transactionMode, setTransactionMode] = useState('sale'); // 'sale' or 'return'
 
   const [invoiceItems, setInvoiceItems] = useState([
-    { id: Date.now(), product: '', quantity: 1, pricePerUnit: 0, unitType: 'piece', status: 'included' }
+    { id: Date.now(), product: '', quantity: 1, pricePerUnit: 0, unitType: 'piece', status: 'included', searchFocused: false, searchFilter: '' }
   ]);
   const [taxAmount, setTaxAmount] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
@@ -60,7 +60,7 @@ const Billing = () => {
 
     // 💡 STEP 1: Compute cumulative running piece totals for each product across all active billing rows
     const globalRunningPiecesMap = {};
-    
+
     invoiceItems.forEach(item => {
       if (!item.product || item.status !== 'included') return;
       const targetProduct = products.find(p => p._id === item.product);
@@ -69,24 +69,24 @@ const Billing = () => {
       const pcsPerCtn = Number(targetProduct.piecesPerCartoon) || 1;
       const rowQuantity = Number(item.quantity) || 0;
       const isCarton = item.unitType === 'cartoon';
-      
+
       const calculatedRowPieces = isCarton ? rowQuantity * pcsPerCtn : rowQuantity;
-      
+
       globalRunningPiecesMap[item.product] = (globalRunningPiecesMap[item.product] || 0) + calculatedRowPieces;
     });
 
     // STEP 2: Analyze rows and cross-verify with our running total pieces restriction map
     const analyzedItems = invoiceItems.map(item => {
       const targetProduct = products.find(p => p._id === item.product);
-      
+
       let maxAvailablePieces = 0;
       let displayStockLabel = '0 Pcs';
       let pcsPerCtn = 0;
-      
+
       if (targetProduct) {
         maxAvailablePieces = targetProduct.stockQuantity;
         pcsPerCtn = Number(targetProduct.piecesPerCartoon) || 0;
-        displayStockLabel = targetProduct.packagingType === 'cartoon' 
+        displayStockLabel = targetProduct.packagingType === 'cartoon'
           ? `${targetProduct.cartoonCount} Ctn / ${targetProduct.stockQuantity} Pcs`
           : `${targetProduct.stockQuantity} Pcs`;
       }
@@ -105,7 +105,7 @@ const Billing = () => {
       // 💡 GLOBAL CHECK: Validate line items against total pooled pieces selected across all rows combined
       const pooledPiecesSelectedForProduct = globalRunningPiecesMap[item.product] || 0;
       const isOverStock = isIncluded && targetProduct && pooledPiecesSelectedForProduct > maxAvailablePieces;
-      
+
       if (isOverStock) hasInventoryDeficit = true;
 
       return {
@@ -131,22 +131,24 @@ const Billing = () => {
       totalReturnsCredit,
       netDueTarget,
       hasInventoryDeficit,
-      isBlocked: !selectedCustomer || 
-                 invoiceItems.length === 0 || 
-                 invoiceItems.some(i => !i.product || i.quantity === '') || 
-                 (transactionMode === 'sale' && hasInventoryDeficit) ||
-                 (transactionMode === 'sale' && paymentStatus === 'Partial' && (Number(partialAmount) <= 0 || Number(partialAmount) >= netDueTarget))
+      isBlocked: !selectedCustomer ||
+        invoiceItems.length === 0 ||
+        invoiceItems.some(i => !i.product || i.quantity === '') ||
+        (transactionMode === 'sale' && hasInventoryDeficit) ||
+        (transactionMode === 'sale' && paymentStatus === 'Partial' && (Number(partialAmount) <= 0 || Number(partialAmount) >= netDueTarget))
     };
   }, [invoiceItems, products, taxAmount, discountAmount, selectedCustomer, paymentStatus, partialAmount, transactionMode]);
 
   const appendRowItem = () => {
-    setInvoiceItems(prev => [...prev, { 
-      id: Date.now(), 
-      product: '', 
-      quantity: '', 
-      pricePerUnit: 0, 
+    setInvoiceItems(prev => [...prev, {
+      id: Date.now(),
+      product: '',
+      quantity: '',
+      pricePerUnit: 0,
       unitType: 'piece',
-      status: transactionMode === 'return' ? 'returned' : 'included' 
+      status: transactionMode === 'return' ? 'returned' : 'included',
+      searchFocused: false,
+      searchFilter: ''
     }]);
   };
 
@@ -159,11 +161,13 @@ const Billing = () => {
     setInvoiceItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       const revisedItem = { ...item, [field]: value };
-      
+
       if (field === 'product') {
         const match = products.find(p => p._id === value);
         revisedItem.pricePerUnit = match ? match.price : 0;
         revisedItem.unitType = match && match.packagingType === 'cartoon' ? 'cartoon' : 'piece';
+        revisedItem.searchFilter = match ? `${match.sku}` : '';
+        revisedItem.searchFocused = false;
       }
       return revisedItem;
     }));
@@ -179,9 +183,9 @@ const Billing = () => {
       const payload = {
         customer: selectedCustomer._id,
         items: billingCalculations.items.map(({ product, quantity, pricePerUnit, unitType, status }) => ({
-          product, 
-          quantity: Number(quantity), 
-          pricePerUnit: Number(pricePerUnit), 
+          product,
+          quantity: Number(quantity),
+          pricePerUnit: Number(pricePerUnit),
           unitType,
           status
         })),
@@ -196,7 +200,7 @@ const Billing = () => {
 
       setSelectedCustomer(null);
       setCustomerSearch('');
-      setInvoiceItems([{ id: Date.now(), product: '', quantity: 1, pricePerUnit: 0, unitType: 'piece', status: 'included' }]);
+      setInvoiceItems([{ id: Date.now(), product: '', quantity: 1, pricePerUnit: 0, unitType: 'piece', status: 'included', searchFocused: false, searchFilter: '' }]);
       setTaxAmount('');
       setDiscountAmount('');
       setPartialAmount('');
@@ -249,7 +253,7 @@ const Billing = () => {
                 const isCarton = item.unitType === 'cartoon';
                 const pcsPerCtn = Number(item.piecesPerCartoon || (item.product ? item.product.piecesPerCartoon : 0)) || 0;
                 const basePrice = Number(item.pricePerUnit) || 0;
-                
+
                 const totalCalculatedPieces = isCarton ? item.quantity * pcsPerCtn : item.quantity;
                 const totalRowCost = Number(item.rowTotal) || (totalCalculatedPieces * basePrice);
 
@@ -257,13 +261,13 @@ const Billing = () => {
                   <div key={index} className="py-2.5 flex justify-between items-start text-zinc-800 border-b border-zinc-100 last:border-none text-left">
                     <div className="space-y-0.5 w-full mr-4">
                       <p className="font-bold text-zinc-900 flex items-center gap-1 text-xs">
-                        {item.product?.name || 'Asset Component'}
+                        {item.product?.sku || 'Asset Component'}
                         <span className="text-[9px] px-1 bg-zinc-100 text-zinc-500 font-mono rounded normal-case">
                           {isCarton ? 'ctn' : 'pc'}
                         </span>
                         {isItemReturn && <span className="text-[8px] px-1 bg-zinc-100 text-red-600 rounded uppercase font-black tracking-wide border border-red-200">Returned</span>}
                       </p>
-                      
+
                       {isCarton ? (
                         <div className="text-[11px] text-zinc-500 space-y-0.5 font-medium mt-0.5">
                           <p className="font-mono text-zinc-400">
@@ -292,16 +296,25 @@ const Billing = () => {
             <div className="flex justify-between"><span>Subtotal Balance</span><span className="font-mono text-zinc-900">₹{Number(completedInvoice.subTotal).toFixed(2)}</span></div>
             {completedInvoice.taxAmount > 0 && <div className="flex justify-between"><span>Tax Duty Assessment</span><span className="font-mono text-zinc-900">₹{Number(completedInvoice.taxAmount).toFixed(2)}</span></div>}
             {completedInvoice.discountAmount > 0 && <div className="flex justify-between text-red-600"><span>Discount Above Tax</span><span className="font-mono">-₹{Number(completedInvoice.discountAmount).toFixed(2)}</span></div>}
-            
+
             <div className="flex justify-between items-baseline pt-2 border-t border-dashed border-zinc-100 text-zinc-900">
               <span className="uppercase text-[10px] tracking-wider">Grand Total Settled</span>
               <span className="text-lg font-black font-mono text-zinc-950">₹{Number(completedInvoice.grandTotal).toFixed(2)}</span>
             </div>
 
+            {/* 💡 FIXED: Pulls the paid amount directly out of the verified server response */}
             <div className="flex justify-between items-center p-2 bg-emerald-50/60 rounded-xl text-emerald-900 font-bold border border-emerald-100 mt-2">
               <span className="text-xs uppercase tracking-wide">Total Amount Paid</span>
               <span className="font-mono text-sm font-black">₹{Number(completedInvoice.amountPaid).toFixed(2)}</span>
             </div>
+
+            {/* 💡 FIXED: Computes balance deficit due directly from database outputs safely */}
+            {Number(completedInvoice.grandTotal) - Number(completedInvoice.amountPaid) > 0 && (
+              <div className="flex justify-between items-center p-2 bg-amber-50/60 rounded-xl text-amber-800 font-bold border border-amber-100 mt-1">
+                <span className="text-xs uppercase tracking-wide">Balance Deficit Due</span>
+                <span className="font-mono text-sm font-black">₹{(Number(completedInvoice.grandTotal) - Number(completedInvoice.amountPaid)).toFixed(2)}</span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-2 print:hidden select-none">
@@ -349,7 +362,7 @@ const Billing = () => {
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Bill Entry Table</span>
                 <button type="button" onClick={appendRowItem} className="text-xs font-bold text-zinc-900 bg-white border border-zinc-200 px-2.5 py-1 rounded-lg hover:bg-zinc-50 cursor-pointer shadow-3xs">+ Append Row Item</button>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-visible">
                 <table className="w-full text-left text-xs font-medium border-collapse">
                   <thead>
                     <tr className="bg-zinc-50/70 border-b border-zinc-200 font-bold uppercase tracking-wider text-zinc-400 select-none">
@@ -368,40 +381,78 @@ const Billing = () => {
 
                       return (
                         <tr key={row.id} className={`transition-colors duration-150 ${row.isInvalid ? 'bg-red-50/60' : 'hover:bg-zinc-50/20'}`}>
+
+                          {/* 💡 BULLETPROOF COMBOBOX: Searchable without absolute positioning issues */}
                           <td className="px-4 py-3">
-                            <select value={row.product} onChange={(e) => modifyRowField(row.id, 'product', e.target.value)} className="w-full rounded-lg border border-zinc-200 p-1 bg-white font-medium focus:outline-hidden">
-                              <option value="">-- Choose Target --</option>
-                              {products.map(p => (
-                                <option key={p._id} value={p._id}>
-                                  {p.sku} ({p.packagingType === 'cartoon' ? `${p.cartoonCount} Ctn / ${p.stockQuantity} Pcs` : `${p.stockQuantity} Pcs`} left)
-                                </option>
-                              ))}
-                            </select>
-                            {/* 💡 CUMULATIVE DEFICIT ALERT TRIGGER */}
+                            <div className="w-full">
+                              {/* Native HTML Datalist provides auto-filtering search right out of the box */}
+                              <input
+                                list={`products-datalist-${row.id}`}
+                                placeholder="Search product SKU or Name..."
+                                value={row.searchFilter || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  modifyRowField(row.id, 'searchFilter', val);
+
+                                  // Match selection by SKU or formatting template label text strings
+                                  const match = products.find(p =>
+                                    p.sku === val ||
+                                    `${p.sku} - ${p.name}`.toLowerCase() === val.toLowerCase()
+                                  );
+                                  if (match) {
+                                    modifyRowField(row.id, 'product', match._id);
+                                  }
+                                }}
+                                className="w-full rounded-lg border border-zinc-200 p-1.5 bg-white text-xs font-medium focus:outline-none focus:border-zinc-400"
+                              />
+
+                              <datalist id={`products-datalist-${row.id}`}>
+                                {products.map(p => (
+                                  <option
+                                    key={p._id}
+                                    value={`${p.sku} - ${p.name}`}
+                                  >
+                                    {p.packagingType === 'cartoon' ? `${p.cartoonCount} Ctn / ${p.stockQuantity} Pcs left` : `${p.stockQuantity} Pcs left`}
+                                  </option>
+                                ))}
+                              </datalist>
+                            </div>
+
                             {row.isInvalid && (
                               <p className="mt-1 text-[11px] font-bold text-red-600 animate-pulse">
                                 ⚠️ Stock Over-limit! Total added ({row.totalPooledSelected} Pcs) exceeds available stock ({row.availableStockLabel}).
                               </p>
                             )}
                           </td>
-                          
+
                           <td className="px-4 py-3 text-center">
-                            <select disabled={!displayCartonSelector} value={row.unitType} onChange={(e) => modifyRowField(row.id, 'unitType', e.target.value)} className="w-full rounded-lg border border-zinc-200 p-1 bg-white font-semibold text-[11px] text-zinc-700 disabled:opacity-55 focus:outline-hidden">
+                            <select
+                              disabled={!displayCartonSelector}
+                              value={row.unitType}
+                              onChange={(e) => modifyRowField(row.id, 'unitType', e.target.value)}
+                              className="w-full rounded-lg border border-zinc-200 p-1 bg-white font-semibold text-[11px] text-zinc-700 disabled:opacity-55 focus:outline-hidden"
+                            >
                               <option value="piece">Pieces (Pcs)</option>
                               {displayCartonSelector && <option value="cartoon">Cartons (Ctn)</option>}
                             </select>
                           </td>
 
                           <td className="px-4 py-3">
-                            <input type="number" min="1" value={row.quantity === '' ? '' : row.quantity} onChange={(e) => {
-                              const inputValue = e.target.value;
-                              if (inputValue === '') {
-                                modifyRowField(row.id, 'quantity', '');
-                              } else {
-                                const parsedValue = parseInt(inputValue, 10);
-                                modifyRowField(row.id, 'quantity', Math.max(1, isNaN(parsedValue) ? 1 : parsedValue));
-                              }
-                            }} className="w-full text-right rounded-lg border border-zinc-200 p-1 bg-white focus:outline-none font-mono" />
+                            <input
+                              type="number"
+                              min="1"
+                              value={row.quantity === '' ? '' : row.quantity}
+                              onChange={(e) => {
+                                const inputValue = e.target.value;
+                                if (inputValue === '') {
+                                  modifyRowField(row.id, 'quantity', '');
+                                } else {
+                                  const parsedValue = parseInt(inputValue, 10);
+                                  modifyRowField(row.id, 'quantity', Math.max(1, isNaN(parsedValue) ? 1 : parsedValue));
+                                }
+                              }}
+                              className="w-full text-right rounded-lg border border-zinc-200 p-1 bg-white focus:outline-none font-mono"
+                            />
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-bold text-zinc-600">
                             ₹{row.pricePerUnit.toFixed(2)}
@@ -412,7 +463,16 @@ const Billing = () => {
                             )}
                           </td>
                           <td className={`px-4 py-3 text-right font-bold font-mono ${row.rowTotal < 0 ? 'text-red-600' : 'text-zinc-900'}`}>₹{row.rowTotal.toFixed(2)}</td>
-                          <td className="px-4 py-3 text-center"><button type="button" onClick={() => clearRowItem(row.id)} disabled={invoiceItems.length === 1} className="text-zinc-300 hover:text-red-600 disabled:opacity-20 transition font-bold cursor-pointer">✕</button></td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => clearRowItem(row.id)}
+                              disabled={invoiceItems.length === 1}
+                              className="text-zinc-300 hover:text-red-600 disabled:opacity-20 transition font-bold cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -424,7 +484,7 @@ const Billing = () => {
 
           <div className="bg-white border border-zinc-200 p-5 rounded-xl shadow-2xs space-y-4 sticky top-20">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 pb-2 select-none">Checkout Aggregates</span>
-            
+
             {transactionMode === 'sale' ? (
               <>
                 <div className="space-y-3.5 border-b border-zinc-100 pb-4">
@@ -464,7 +524,6 @@ const Billing = () => {
               </div>
             )}
 
-            {/* 💡 BUTTON BLOCK: Will automatically disable itself if combined row pieces exceed warehouse totals */}
             <button type="button" disabled={billingCalculations.isBlocked || isSubmitting} onClick={executeInvoiceCompilation} className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-100 disabled:text-zinc-400 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition duration-150 cursor-pointer select-none">
               {isSubmitting ? 'Processing...' : transactionMode === 'return' ? 'Log Return Statement' : 'Generate Bill'}
             </button>

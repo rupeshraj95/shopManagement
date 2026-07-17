@@ -316,7 +316,7 @@ const PastBills = () => {
                     <div key={index} className="py-2.5 flex justify-between items-start text-zinc-800 print:text-black text-left">
                       <div className="space-y-0.5 w-full mr-4">
                         <p className="font-bold text-zinc-900 print:text-black flex items-center gap-1.5 uppercase">
-                          {item.product?.name || 'Asset Component'}
+                          {item.product?.sku || 'Asset Component'}
                           <span className="text-[9px] px-1 bg-zinc-100 text-zinc-500 font-mono rounded normal-case print:border print:border-zinc-300">
                             {isCarton ? 'ctn' : 'pc'}
                           </span>
